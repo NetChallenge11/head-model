@@ -1,3 +1,7 @@
+## head 모델 추론 API
+## head 모델 추론 시간과 tail 모델과의 통신 시간
+## 총 2가지 측정
+
 from flask import Flask, request, jsonify, logging
 import tensorflow as tf
 import numpy as np
@@ -6,6 +10,7 @@ from keras.utils import img_to_array
 import imageio
 import io
 import requests
+import time
 
 app = Flask(__name__)
 
@@ -33,18 +38,36 @@ def head_predict_and_forward():
     app.logger.debug("File received:", file.filename)
 
     try:
+        # 시간 측정 시작 (Head 모델 처리 시간)
+        start_time_head = time.time()
+
         image = Image.open(io.BytesIO(file.read()))
         processed_image = preprocess_image(image)
         app.logger.debug("Image processed")
-        
+
         # Head 모델 예측 수행
         head_output = head_model.predict(processed_image)
-        app.logger.debug(f"Head model output: {head_output}")  # 로그 추가
-        
+        app.logger.debug(f"Head model output: {head_output}")
+
+        # Head 모델 처리 시간 측정 종료 및 경과 시간 계산
+        end_time_head = time.time()
+        elapsed_time_head = end_time_head - start_time_head
+
+        # 시간 측정 시작 (Tail 모델 통신 시간)
+        start_time_tail = time.time()
+
         # 중간 결과를 Tail 모델로 전송하고 최종 결과 반환
         tail_response = send_output_to_tail(head_output)
 
-        if tail_response is None:  # Tail 모델이 응답하지 않으면
+        # Tail 모델 통신 시간 측정 종료 및 경과 시간 계산
+        end_time_tail = time.time()
+        elapsed_time_tail = end_time_tail - start_time_tail
+
+        # 로그 출력
+        app.logger.debug(f"Head processing time: {elapsed_time_head} seconds")
+        app.logger.debug(f"Tail communication time: {elapsed_time_tail} seconds")
+
+        if tail_response is None:
             return jsonify({'error': 'Failed to reach Tail model'}), 500
 
         if tail_response.status_code == 200:
